@@ -1,0 +1,10 @@
+*.mkv
+*.mp4
+*.avi
+*.mov
+*.zip
+*.7z
+*.rar
+*.iso
+.DS_Store
+Thumbs.db
