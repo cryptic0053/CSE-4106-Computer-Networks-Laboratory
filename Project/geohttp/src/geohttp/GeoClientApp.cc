@@ -1,65 +1,80 @@
 #include "GeoClientApp.h"
 #include "inet/common/packet/Packet.h"
-#include "inet/common/TimeTag_m.h"
-#include "inet/common/INETUtils.h"
+#include "inet/common/packet/chunk/BytesChunk.h"
+
+using namespace inet;
 
 Define_Module(GeoClientApp);
 
-void GeoClientApp::initialize(int stage) {
+void GeoClientApp::initialize(int stage)
+{
     TcpAppBase::initialize(stage);
+
     if (stage == INITSTAGE_LOCAL) {
+        connectAddressStr = par("connectAddress").stdstringValue();
         connectPort = par("connectPort");
-        geoLat = par("geoLat").doubleValue();
-        geoLon = par("geoLon").doubleValue();
-        nextReqInterval = par("requestInterval").doubleValue();
-        objectSize = par("objectSizeBytes").intValue();
+        if (hasPar("latitude"))  latitude  = par("latitude");
+        if (hasPar("longitude")) longitude = par("longitude");
+        if (hasPar("path"))      path      = par("path").stdstringValue();
     }
     else if (stage == INITSTAGE_APPLICATION_LAYER) {
-        L3AddressResolver().tryResolve(par("connectAddress"), connectAddress);
-        socket.setOutputGate(gate("socketOut"));
-        socket.setCallback(this);
-        socket.connect(connectAddress, connectPort);
+        L3AddressResolver().tryResolve(connectAddressStr.c_str(), connectAddress);
+
+        socket = new TcpSocket();
+        socket->setOutputGate(gate("socketOut"));
+        socket->setCallback(this);
+        socket->connect(connectAddress, connectPort);
     }
 }
 
-void GeoClientApp::handleMessageWhenUp(cMessage *msg) {
-    if (msg->isSelfMessage()) {
-        sendRequest();
-    } else {
-        socket.processMessage(msg);
+void GeoClientApp::handleMessageWhenUp(cMessage *msg)
+{
+    if (socket && socket->belongsToSocket(msg)) {
+        socket->processMessage(msg);
+    }
+    else {
+        delete msg;
     }
 }
 
-void GeoClientApp::socketEstablished(TcpSocket *socket) {
-    connected = true;
-    scheduleAt(simTime() + nextReqInterval, new cMessage("send"));
+void GeoClientApp::socketEstablished(TcpSocket *s)
+{
+    EV_INFO << "Client connected; sending HTTP GET with X-Client-Geo\n";
+    sendRequest();
 }
 
-void GeoClientApp::sendRequest() {
-    if (!connected) return;
-
-    // Minimal HTTP GET with custom header
+void GeoClientApp::sendRequest()
+{
     std::ostringstream oss;
-    oss << "GET /object?size=" << objectSize << " HTTP/1.1\r\n";
-    oss.setf(std::ios::fixed); oss.precision(6);
-    oss << "Host: lb\r\n";
-    oss << "X-Client-Geo: " << geoLat << "," << geoLon << "\r\n";
-    oss << "Connection: keep-alive\r\n\r\n";
+    oss << "GET " << path << " HTTP/1.1\r\n"
+        << "Host: " << connectAddressStr << ":" << connectPort << "\r\n"
+        << "X-Client-Geo: " << latitude << "," << longitude << "\r\n"
+        << "Connection: close\r\n\r\n";
 
-    auto payload = makeShared<BytesChunk>(oss.str());
+    std::string req = oss.str();
+    std::vector<uint8_t> data(req.begin(), req.end());
+    auto payload = makeShared<BytesChunk>(data);
+
     auto pkt = new Packet("http-get");
     pkt->insertAtBack(payload);
-    socket.send(pkt);
-
-    // schedule next
-    nextReqInterval = par("requestInterval").doubleValue();
-    scheduleAt(simTime() + nextReqInterval, new cMessage("send"));
+    socket->send(pkt);
 }
 
-void GeoClientApp::socketDataArrived(TcpSocket *socket, Packet *pkt, bool) {
-    // we don't parse deeply; just consume the response
+void GeoClientApp::socketDataArrived(TcpSocket *, Packet *pkt, bool)
+{
+    // We don't parse the body here, just discard
     delete pkt;
 }
 
-void GeoClientApp::socketClosed(TcpSocket *socket) { connected = false; }
-void GeoClientApp::socketFailure(TcpSocket *socket, int) { connected = false; }
+void GeoClientApp::socketClosed(TcpSocket *s)
+{
+    delete s;
+    socket = nullptr;
+}
+
+void GeoClientApp::socketFailure(TcpSocket *s, int code)
+{
+    EV_WARN << "Client socket failure code=" << code << "\n";
+    delete s;
+    socket = nullptr;
+}

@@ -1,55 +1,78 @@
 #include "MirrorReporterApp.h"
+#include "inet/common/packet/Packet.h"
+#include "inet/common/packet/chunk/BytesChunk.h"
+#include <vector>
+#include <sstream>
+
+using namespace inet;
 
 Define_Module(MirrorReporterApp);
 
-void MirrorReporterApp::initialize(int stage) {
+void MirrorReporterApp::initialize(int stage)
+{
     TcpAppBase::initialize(stage);
     if (stage == INITSTAGE_LOCAL) {
         registryPort = par("registryPort");
         mirrorId = par("mirrorId").stdstringValue();
-        geoLat = par("geoLat").doubleValue();
-        geoLon = par("geoLon").doubleValue();
-        reportInterval = par("reportInterval").doubleValue();
+        if (hasPar("latitude"))  latitude  = par("latitude");
+        if (hasPar("longitude")) longitude = par("longitude");
+        if (hasPar("load"))      load      = par("load");
+        if (hasPar("ok"))        ok        = par("ok");
     }
     else if (stage == INITSTAGE_APPLICATION_LAYER) {
         L3AddressResolver().tryResolve(par("registryAddress"), registryAddr);
-        socket.setOutputGate(gate("socketOut"));
-        socket.setCallback(this);
-        connectIfNeeded();
-        scheduleAt(simTime() + reportInterval, new cMessage("tick"));
+
+        auto *socket = new TcpSocket();
+        socket->setOutputGate(gate("socketOut"));
+        socket->setCallback(this);
+        socket->connect(registryAddr, registryPort);
     }
 }
 
-void MirrorReporterApp::handleMessageWhenUp(cMessage *msg) {
-    if (msg->isSelfMessage()) {
-        connectIfNeeded();
-        sendReport();
-        scheduleAt(simTime() + reportInterval, msg);
+void MirrorReporterApp::handleMessageWhenUp(cMessage *msg)
+{
+    if (auto ind = dynamic_cast<TcpAvailableInfo *>(msg->getControlInfo())) {
+        auto *socket = new TcpSocket(ind);
+        socket->setOutputGate(gate("socketOut"));
+        socket->setCallback(this);
+        socket->processMessage(msg);
     } else {
-        socket.processMessage(msg);
+        delete msg;
     }
 }
 
-void MirrorReporterApp::connectIfNeeded() {
-    if (!connected)
-        socket.connect(registryAddr, registryPort);
-}
-
-void MirrorReporterApp::sendReport() {
-    if (!connected) return;
-    // Simple line protocol: REPORT id=... lat=... lon=... load=... ok=1
-    // Here we don't compute live load inside mirror; you can wire a signal or param if needed.
-    double fakeLoad = uniform(0, 1); // demo; replace with your queue depth or req/s
+void MirrorReporterApp::socketEstablished(TcpSocket *socket)
+{
     std::ostringstream oss;
-    oss.setf(std::ios::fixed); oss.precision(6);
-    oss << "REPORT id=" << mirrorId << " lat=" << geoLat << " lon=" << geoLon
-        << " load=" << fakeLoad << " ok=1\n";
-    auto pkt = new Packet("report");
-    pkt->insertAtBack(makeShared<BytesChunk>(oss.str()));
-    socket.send(pkt);
+    oss << "REPORT id=" << mirrorId
+        << " lat=" << latitude
+        << " lon=" << longitude
+        << " load=" << load
+        << " ok=" << (ok ? 1 : 0) << "\r\n";
+
+    std::string msg = oss.str();
+    std::vector<uint8_t> bytes(msg.begin(), msg.end());
+    auto payload = makeShared<BytesChunk>(bytes);
+
+    auto pkt = new Packet("mirror-report");
+    pkt->insertAtBack(payload);
+    socket->send(pkt);
+
+    socket->close();
 }
 
-void MirrorReporterApp::socketEstablished(TcpSocket *) { connected = true; }
-void MirrorReporterApp::socketDataArrived(TcpSocket *, Packet *pkt, bool) { delete pkt; }
-void MirrorReporterApp::socketClosed(TcpSocket *) { connected = false; }
-void MirrorReporterApp::socketFailure(TcpSocket *, int) { connected = false; }
+void MirrorReporterApp::socketDataArrived(TcpSocket *, Packet *pkt, bool)
+{
+    delete pkt;  // reporter doesn't expect responses
+}
+
+void MirrorReporterApp::socketClosed(TcpSocket *socket)
+{
+    delete socket;
+}
+
+void MirrorReporterApp::socketFailure(TcpSocket *socket, int code)
+{
+    EV_WARN << "MirrorReporter socket failure code=" << code << "\n";
+    delete socket;
+}

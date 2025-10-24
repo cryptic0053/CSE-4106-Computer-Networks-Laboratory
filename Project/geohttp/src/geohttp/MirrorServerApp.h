@@ -1,30 +1,32 @@
 #pragma once
 #include "inet/applications/tcpapp/TcpAppBase.h"
 #include "inet/transportlayer/contract/tcp/TcpSocket.h"
-#include "inet/transportlayer/contract/tcp/TcpSocketMap.h"
+#include "inet/common/INETDefs.h"
+#include <map>
+#include <string>
 
 using namespace inet;
 
-class MirrorServerApp : public TcpAppBase, public TcpSocket::ICallback
+class MirrorServerApp : public TcpAppBase
 {
   protected:
-    int localPort;
+    int localPort = 8081;
     std::string mirrorId;
-    double geoLat, geoLon;
-    double serviceRateBps;
-
-    TcpSocketMap socketMap;
+    std::map<int, TcpSocket*> socketMap;
 
   protected:
     virtual void initialize(int stage) override;
     virtual void handleMessageWhenUp(cMessage *msg) override;
 
-    // TcpSocket::ICallback
-    virtual void socketAvailable(TcpSocket *socket, TcpAvailableInfo *availableInfo) override;
+    virtual void handleStartOperation(LifecycleOperation *op) override {}
+    virtual void handleStopOperation(LifecycleOperation *op) override {}
+    virtual void handleCrashOperation(LifecycleOperation *op) override {}
+    virtual void handleTimer(cMessage *msg) override {}
+
     virtual void socketEstablished(TcpSocket *socket) override;
     virtual void socketDataArrived(TcpSocket *socket, Packet *pkt, bool urgent) override;
     virtual void socketClosed(TcpSocket *socket) override;
     virtual void socketFailure(TcpSocket *socket, int code) override;
 
-    void replyOk(TcpSocket *socket, int objectBytes);
+    void reply200(TcpSocket *socket, const std::string& body);
 };

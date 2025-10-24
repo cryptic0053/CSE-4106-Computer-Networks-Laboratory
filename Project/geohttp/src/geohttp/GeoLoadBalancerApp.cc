@@ -1,129 +1,110 @@
 #include "GeoLoadBalancerApp.h"
+#include "GeoMath.h"
 #include <regex>
+#include <sstream>
 #include "inet/common/packet/Packet.h"
+#include "inet/common/packet/chunk/BytesChunk.h"
+
+using namespace inet;
 
 Define_Module(GeoLoadBalancerApp);
 
-void GeoLoadBalancerApp::initialize(int stage) {
+void GeoLoadBalancerApp::initialize(int stage)
+{
     TcpAppBase::initialize(stage);
+
     if (stage == INITSTAGE_LOCAL) {
-        localPort = par("localPort");
-        mode = par("mode").stdstringValue();
-        wDist = par("weightDistance").doubleValue();
-        wLoad = par("weightLoad").doubleValue();
-        wDown = par("downPenalty").doubleValue();
-        expiryMs = par("registryExpiryMs");
+        localPort   = par("localPort");
+        mode        = par("mode").stdstringValue();
+        wDist       = par("weightDistance").doubleValue();
+        wLoad       = par("weightLoad").doubleValue();
+        wDown       = par("downPenalty").doubleValue();
+        expiryMs    = par("registryExpiryMs");
     }
     else if (stage == INITSTAGE_APPLICATION_LAYER) {
-        TcpSocket *listener = new TcpSocket();
+        auto *listener = new TcpSocket();
         listener->setOutputGate(gate("socketOut"));
         listener->setCallback(this);
         listener->bind(localPort);
         listener->listen();
-        socketMap.addSocket(listener);
+        socketMap[listener->getSocketId()] = listener;
 
         L3AddressResolver().tryResolve(par("registryAddress"), registryAddr);
         registryPort = par("registryPort");
     }
 }
 
-void GeoLoadBalancerApp::handleMessageWhenUp(cMessage *msg) {
-    auto ind = dynamic_cast<TcpAvailableInfo *>(msg->getControlInfo());
-    if (ind) {
-        auto *socket = new TcpSocket(ind);
-        socket->setOutputGate(gate("socketOut"));
-        socket->setCallback(this);
-        socketMap.addSocket(socket);
-    } else {
-        TcpSocket *sock = socketMap.findSocketFor(msg);
-        if (sock) sock->processMessage(msg);
-        else delete msg;
-    }
+void GeoLoadBalancerApp::handleMessageWhenUp(cMessage *msg)
+{
+    TcpSocket *sock = nullptr;
+    for (auto &p : socketMap)
+        if (p.second->belongsToSocket(msg)) { sock = p.second; break; }
+
+    if (sock) sock->processMessage(msg);
+    else delete msg;
 }
 
-void GeoLoadBalancerApp::socketAvailable(TcpSocket *, TcpAvailableInfo *) { }
-void GeoLoadBalancerApp::socketEstablished(TcpSocket *) { }
+void GeoLoadBalancerApp::socketEstablished(TcpSocket *socket)
+{
+    socketMap[socket->getSocketId()] = socket;
+}
 
-void GeoLoadBalancerApp::socketDataArrived(TcpSocket *socket, Packet *pkt, bool) {
-    auto req = pkt->peekAtFront<BytesChunk>()->getBytes().str();
+void GeoLoadBalancerApp::socketDataArrived(TcpSocket *socket, Packet *pkt, bool)
+{
+    auto chunk = pkt->peekAtFront<BytesChunk>();
+    const auto &bytes = chunk->getBytes();
+    std::string req(bytes.begin(), bytes.end());
     delete pkt;
 
-    // Parse path and X-Client-Geo header
+    // Parse path
     std::smatch m;
     std::string path = "/";
-    if (std::regex_search(req, m, std::regex("GET ([^\\s]+) HTTP/1")))
+    if (std::regex_search(req, m, std::regex("GET\\s+([^\\s]+)\\s+HTTP/1")))
         path = m[1];
 
+    // Parse X-Client-Geo
     double clat = 0, clon = 0;
-    if (std::regex_search(req, m, std::regex("X-Client-Geo:\\s*([-0-9\\.]+),([-0-9\\.]+)")))
-    {
-        clat = std::stod(m[1]); clon = std::stod(m[2]);
+    if (std::regex_search(req, m, std::regex("X-Client-Geo:\\s*([-0-9\\.]+),([-0-9\\.]+)"))) {
+        clat = std::stod(m[1]);
+        clon = std::stod(m[2]);
     }
 
     ensureRegistryCache();
     auto chosen = chooseMirror(clat, clon);
-
     reply302(socket, chosen, path);
 }
 
-void GeoLoadBalancerApp::reply302(TcpSocket *socket, const MirrorRow& m, const std::string& path) {
-    // Simulate DNS/host names as mirror ID
-    std::ostringstream oss;
-    oss << "HTTP/1.1 302 Found\r\n"
-        << "Location: http://" << m.id << ":8081" << path << "\r\n"
-        << "X-Chosen-Mirror: " << m.id << "\r\n\r\n";
-    auto pkt = new Packet("http-302");
-    pkt->insertAtBack(makeShared<BytesChunk>(oss.str()));
-    socket->send(pkt);
+void GeoLoadBalancerApp::socketClosed(TcpSocket *socket)
+{
+    socketMap.erase(socket->getSocketId());
+    delete socket;
 }
 
-void GeoLoadBalancerApp::socketClosed(TcpSocket *) { }
-void GeoLoadBalancerApp::socketFailure(TcpSocket *, int) { }
-
-void GeoLoadBalancerApp::ensureRegistryCache() {
-    if (simTime() - lastFetch < 0.5) return;
-    fetchMirrors();
+void GeoLoadBalancerApp::socketFailure(TcpSocket *socket, int code)
+{
+    EV_WARN << "LB socket failure code=" << code << "\n";
+    socketMap.erase(socket->getSocketId());
+    delete socket;
 }
 
-void GeoLoadBalancerApp::fetchMirrors() {
-    // open a transient socket, GET /mirrors, read JSON array [{"id":"m0","lat":..,"lon":..,"load":..}, ...]
-    TcpSocket s; s.setOutputGate(gate("socketOut"));
-    s.connect(registryAddr, registryPort);
-    // send GET
-    {
-        auto pkt = new Packet("getmirrors");
-        std::string q = "GET /mirrors HTTP/1.1\r\nHost: registry\r\n\r\n";
-        pkt->insertAtBack(makeShared<BytesChunk>(q));
-        s.send(pkt);
-    }
-    // RECEIVE one packet (blocking not available; hack: poll via self messages is complex)
-    // For a minimal skeleton, we assume immediate arrival handled in the same event loop:
-    // In practice, refactor to an async socket with a mini-state machine. For brevity, we “optimistically” read any queued message now.
-    cMessage *msg = nullptr;
-    while ((msg = s.pullMessage()) != nullptr) {
-        auto pkt = check_and_cast<Packet*>(msg);
-        auto body = pkt->peekAtFront<BytesChunk>()->getBytes().str();
-        // parse JSON very simply
-        mirrors.clear();
-        std::regex rowRe("\\{\"id\":\"([^\"]+)\",\"lat\":([-0-9\\.]+),\"lon\":([-0-9\\.]+),\"load\":([-0-9\\.]+)\\}");
-        for (auto it = std::sregex_iterator(body.begin(), body.end(), rowRe); it != std::sregex_iterator(); ++it) {
-            MirrorRow r;
-            r.id = (*it)[1].str();
-            r.lat = std::stod((*it)[2].str());
-            r.lon = std::stod((*it)[3].str());
-            r.load = std::stod((*it)[4].str());
-            mirrors.push_back(r);
-        }
-        delete pkt;
-    }
-    s.close();
+void GeoLoadBalancerApp::ensureRegistryCache()
+{
+    if (simTime() - lastFetch < SimTime(expiryMs / 1000.0))
+        return;
+
+    // For now, static demo mirrors (registry integration can be added later)
+    mirrors.clear();
+    mirrors.push_back({"mirror0", 23.75, 90.39, 0.3});   // Dhaka, Bangladesh
+    mirrors.push_back({"mirror1", 35.68, 139.69, 0.5});  // Tokyo, Japan
+    mirrors.push_back({"mirror2", 51.51, -0.13, 0.4});   // London, UK
     lastFetch = simTime();
 }
 
-MirrorRow GeoLoadBalancerApp::chooseMirror(double clat, double clon) {
-    if (mirrors.empty()) return MirrorRow{ "fallback", 0, 0, 1.0 };
+MirrorRow GeoLoadBalancerApp::chooseMirror(double clat, double clon)
+{
+    if (mirrors.empty())
+        return MirrorRow{"fallback", 0, 0, 1.0};
 
-    // normalize load
     double maxLoad = 0.0001;
     for (auto &m : mirrors) maxLoad = std::max(maxLoad, m.load);
 
@@ -134,8 +115,25 @@ MirrorRow GeoLoadBalancerApp::chooseMirror(double clat, double clon) {
         double dkm = haversine_km(clat, clon, m.lat, m.lon);
         double dnorm = dkm / 20000.0;
         double lnorm = m.load / maxLoad;
-        double score = wDist*dnorm + wLoad*lnorm; // health handled upstream
+        double score = wDist * dnorm + wLoad * lnorm;
         if (score < bestScore) { bestScore = score; best = m; }
     }
     return best;
+}
+
+void GeoLoadBalancerApp::reply302(TcpSocket *socket, const MirrorRow &m, const std::string &path)
+{
+    std::ostringstream oss;
+    oss << "HTTP/1.1 302 Found\r\n"
+        << "Location: http://" << m.id << ":8081" << path << "\r\n"
+        << "X-Chosen-Mirror: " << m.id << "\r\n"
+        << "Content-Length: 0\r\n\r\n";
+
+    std::string s = oss.str();
+    std::vector<uint8_t> data(s.begin(), s.end());
+    auto payload = makeShared<BytesChunk>(data);
+
+    auto pkt = new Packet("http-302");
+    pkt->insertAtBack(payload);
+    socket->send(pkt);
 }

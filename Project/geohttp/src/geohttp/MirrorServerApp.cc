@@ -1,71 +1,88 @@
 #include "MirrorServerApp.h"
-#include <regex>
+#include "inet/common/packet/Packet.h"
+#include "inet/common/packet/chunk/BytesChunk.h"
+#include <sstream>
+#include <vector>
+
+using namespace inet;
 
 Define_Module(MirrorServerApp);
 
-void MirrorServerApp::initialize(int stage) {
+void MirrorServerApp::initialize(int stage)
+{
     TcpAppBase::initialize(stage);
+
     if (stage == INITSTAGE_LOCAL) {
-        localPort = par("localPort");
-        mirrorId = par("mirrorId").stdstringValue();
-        geoLat = par("geoLat").doubleValue();
-        geoLon = par("geoLon").doubleValue();
-        serviceRateBps = par("serviceRateBps").doubleValue();
+        if (hasPar("localPort")) localPort = par("localPort");
+        if (hasPar("mirrorId"))  mirrorId  = par("mirrorId").stdstringValue();
     }
     else if (stage == INITSTAGE_APPLICATION_LAYER) {
-        TcpSocket *listener = new TcpSocket();
+        auto *listener = new TcpSocket();
         listener->setOutputGate(gate("socketOut"));
         listener->setCallback(this);
         listener->bind(localPort);
         listener->listen();
-        socketMap.addSocket(listener);
+        socketMap[listener->getSocketId()] = listener;
     }
 }
 
-void MirrorServerApp::handleMessageWhenUp(cMessage *msg) {
-    auto ind = dynamic_cast<TcpAvailableInfo *>(msg->getControlInfo());
-    if (ind) {
-        auto *socket = new TcpSocket(ind);
-        socket->setOutputGate(gate("socketOut"));
-        socket->setCallback(this);
-        socketMap.addSocket(socket);
-    } else {
-        TcpSocket *sock = socketMap.findSocketFor(msg);
-        if (sock) sock->processMessage(msg);
-        else delete msg;
-    }
+void MirrorServerApp::handleMessageWhenUp(cMessage *msg)
+{
+    TcpSocket *sock = nullptr;
+    for (auto &p : socketMap)
+        if (p.second->belongsToSocket(msg)) { sock = p.second; break; }
+
+    if (sock) sock->processMessage(msg);
+    else delete msg;
 }
 
-void MirrorServerApp::socketAvailable(TcpSocket *, TcpAvailableInfo *) { }
+void MirrorServerApp::socketEstablished(TcpSocket *socket)
+{
+    socketMap[socket->getSocketId()] = socket;
+}
 
-void MirrorServerApp::socketEstablished(TcpSocket *) { }
-
-void MirrorServerApp::socketDataArrived(TcpSocket *socket, Packet *pkt, bool) {
-    // Parse object size from GET /object?size=NNN
-    auto str = pkt->peekAtFront<BytesChunk>()->getBytes().str();
+void MirrorServerApp::socketDataArrived(TcpSocket *socket, Packet *pkt, bool)
+{
+    auto chunk = pkt->peekAtFront<BytesChunk>();
+    const auto &bytes = chunk->getBytes();
+    std::string req(bytes.begin(), bytes.end());
     delete pkt;
 
-    int sizeBytes = 50000;
-    std::smatch m;
-    if (std::regex_search(str, m, std::regex("GET /object\\?size=(\\d+)")))
-        sizeBytes = std::stoi(m[1]);
+    std::ostringstream body;
+    body << "served-by=" << (mirrorId.empty() ? std::to_string(socket->getSocketId()) : mirrorId) << "\n";
 
-    replyOk(socket, sizeBytes);
+    reply200(socket, body.str());
+    socket->close();
 }
 
-void MirrorServerApp::replyOk(TcpSocket *socket, int objectBytes) {
-    // emulate service time
-    double seconds = objectBytes * 8.0 / serviceRateBps;
-    scheduleAt(simTime() + seconds, new cMessage("done")); // lightweight; not per-conn accurate
+void MirrorServerApp::socketClosed(TcpSocket *socket)
+{
+    socketMap.erase(socket->getSocketId());
+    delete socket;
+}
 
+void MirrorServerApp::socketFailure(TcpSocket *socket, int code)
+{
+    EV_WARN << "MirrorServer socket failure id=" << socket->getSocketId()
+            << " code=" << code << "\n";
+    socketMap.erase(socket->getSocketId());
+    delete socket;
+}
+
+void MirrorServerApp::reply200(TcpSocket *socket, const std::string& body)
+{
     std::ostringstream oss;
     oss << "HTTP/1.1 200 OK\r\n"
-        << "Content-Length: " << objectBytes << "\r\n"
-        << "X-Mirror-Id: " << mirrorId << "\r\n\r\n";
+        << "Content-Type: text/plain\r\n"
+        << "Content-Length: " << body.size() << "\r\n"
+        << "Connection: close\r\n\r\n"
+        << body;
+
+    std::string s = oss.str();
+    std::vector<uint8_t> data(s.begin(), s.end());
+    auto payload = makeShared<BytesChunk>(data);
+
     auto pkt = new Packet("http-200");
-    pkt->insertAtBack(makeShared<BytesChunk>(oss.str()));
+    pkt->insertAtBack(payload);
     socket->send(pkt);
 }
-
-void MirrorServerApp::socketClosed(TcpSocket *) { }
-void MirrorServerApp::socketFailure(TcpSocket *, int) { }
