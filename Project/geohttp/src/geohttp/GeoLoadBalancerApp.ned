@@ -3,7 +3,12 @@ package geohttp;
 simple GeoLoadBalancerApp like inet.applications.contract.IApp
 {
     parameters:
+        // Standard IApp parameters (required by INET)
+        string localAddress = default("");
         int localPort = default(8080);
+        bool autoRead = default(true);
+
+        // GeoLoadBalancer specific parameters
         string mode = default("302");           // "302" or "proxy"
         string registryAddress = default("registry");
         int registryPort = default(9090);

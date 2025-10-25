@@ -1,5 +1,5 @@
 out/clang-release//src/geohttp/MirrorRegistryApp.o: \
-  src/geohttp/MirrorRegistryApp.cc src/geohttp/MirrorReporterApp.h \
+  src/geohttp/MirrorRegistryApp.cc src/geohttp/MirrorRegistryApp.h \
   F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/applications/tcpapp/TcpAppBase.h \
   F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/applications/base/ApplicationBase.h \
   F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/lifecycle/ModuleOperations.h \
@@ -54,24 +54,8 @@ out/clang-release//src/geohttp/MirrorRegistryApp.o: \
   F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/transportlayer/contract/tcp/TcpCommand_m.h \
   F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/INETDefs_m.h \
   F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/networklayer/common/IpProtocolId_m.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/networklayer/common/L3Address_m.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/networklayer/common/L3AddressResolver.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/networklayer/contract/IRoutingTable.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/networklayer/contract/IRoute.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/networklayer/common/NetworkInterface.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/ModuleRefByPar.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/ModuleAccess.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/packet/tag/TagSet.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/Protocol.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/Simsignals.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/Simsignals_m.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/networklayer/contract/IInterfaceTable.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/queueing/base/PacketProcessorBase.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/queueing/common/PassivePacketSinkRef.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/ModuleRefByGate.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/queueing/contract/IPassivePacketSink.h \
-  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/queueing/contract/IPacketProcessor.h
-src/geohttp/MirrorReporterApp.h:
+  F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/networklayer/common/L3Address_m.h
+src/geohttp/MirrorRegistryApp.h:
 F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/applications/tcpapp/TcpAppBase.h:
 F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/applications/base/ApplicationBase.h:
 F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/lifecycle/ModuleOperations.h:
@@ -127,19 +111,3 @@ F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/t
 F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/INETDefs_m.h:
 F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/networklayer/common/IpProtocolId_m.h:
 F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/networklayer/common/L3Address_m.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/networklayer/common/L3AddressResolver.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/networklayer/contract/IRoutingTable.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/networklayer/contract/IRoute.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/networklayer/common/NetworkInterface.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/ModuleRefByPar.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/ModuleAccess.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/packet/tag/TagSet.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/Protocol.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/Simsignals.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/Simsignals_m.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/networklayer/contract/IInterfaceTable.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/queueing/base/PacketProcessorBase.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/queueing/common/PassivePacketSinkRef.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/common/ModuleRefByGate.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/queueing/contract/IPassivePacketSink.h:
-F:/omnetpp-6.2.0-windows-x86_64/omnetpp-6.2.0/inet-master/inet-master/src/inet/queueing/contract/IPacketProcessor.h:
